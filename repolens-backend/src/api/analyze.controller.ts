@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { logger, logError, logPhase } from '../utils/logger';
+import { fetchRepoFiles } from '../github/repoFetcher';
 
 /**
  * POST /analyze-repo
@@ -30,11 +31,18 @@ export const analyzeController = async (req: Request, res: Response): Promise<vo
 
     logPhase('1', 'Starting repository analysis', { owner, repo, branch });
 
-    // TODO: Phase 2 - Fetch repo files
+    // Phase 2 - Fetch repo files (filtering happens inside fetchRepoFiles)
     logPhase('2', 'Fetching repository files', { owner, repo, branch });
+    const repoFiles = await fetchRepoFiles({ owner, repo, branch });
+    logger.info('Repository files fetched', {
+      owner,
+      repo,
+      branch,
+      fileCount: repoFiles.length
+    });
     
-    // TODO: Phase 3 - Filter files
-    logPhase('3', 'Filtering files', { owner, repo, branch });
+    // Phase 3 - Files are already filtered in Phase 2
+    logPhase('3', 'Files filtered', { owner, repo, branch, fileCount: repoFiles.length });
     
     // TODO: Phase 4 - Scan files for signals
     logPhase('4', 'Scanning files for signals', { owner, repo, branch });
@@ -46,11 +54,31 @@ export const analyzeController = async (req: Request, res: Response): Promise<vo
     logPhase('6', 'Returning IR', { owner, repo, branch });
 
     const duration = Date.now() - startTime;
-    logger.info('Analysis completed', { owner, repo, branch, duration: `${duration}ms` });
+    logger.info('Analysis completed', { 
+      owner, 
+      repo, 
+      branch, 
+      duration: `${duration}ms`,
+      filesFetched: repoFiles.length
+    });
 
     res.json({
-      message: 'Analysis endpoint - implementation in progress',
-      input: { owner, repo, branch }
+      message: 'Phase 2 complete - Repository files fetched',
+      input: { owner, repo, branch },
+      stats: {
+        filesFetched: repoFiles.length,
+        totalSize: repoFiles.reduce((sum, f) => sum + f.content.length, 0),
+        duration: `${duration}ms`
+      },
+      // For testing/debugging - showing first 10 file paths
+      // Note: ALL files are fetched with full content, stored in repoFiles array
+      // These will be used in Phase 4 for signal extraction
+      sampleFiles: repoFiles.slice(0, 10).map(f => ({
+        path: f.path,
+        size: f.content.length,
+        preview: f.content.substring(0, 100) + (f.content.length > 100 ? '...' : '')
+      })),
+      note: `All ${repoFiles.length} files have been fetched with full content and are ready for Phase 4 (signal extraction)`
     });
   } catch (error) {
     const duration = Date.now() - startTime;

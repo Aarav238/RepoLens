@@ -31,12 +31,22 @@ export function shouldIncludeFile(
     ignoredFolders = DEFAULT_IGNORED_FOLDERS
   } = options;
 
-  // TODO: Phase 2 - Implement:
-  // 1. Check if file extension is in allowedExtensions
-  // 2. Check if any part of path contains ignoredFolders
-  // 3. Return true/false
+  // 1. Check if any part of path contains ignored folders
+  const pathParts = filePath.split('/');
+  for (const ignoredFolder of ignoredFolders) {
+    if (pathParts.includes(ignoredFolder)) {
+      logger.debug('File excluded: contains ignored folder', { filePath, ignoredFolder });
+      return false;
+    }
+  }
 
-  logger.debug('Checking file for inclusion', { filePath, allowedExtensions, ignoredFolders });
-  
-  return false;
+  // 2. Check if file extension is in allowedExtensions
+  const fileExtension = filePath.substring(filePath.lastIndexOf('.'));
+  if (!allowedExtensions.includes(fileExtension.toLowerCase())) {
+    logger.debug('File excluded: extension not allowed', { filePath, fileExtension, allowedExtensions });
+    return false;
+  }
+
+  logger.debug('File included', { filePath });
+  return true;
 }
