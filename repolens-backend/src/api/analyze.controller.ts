@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import { logger, logError, logPhase } from '../utils/logger';
 import { fetchRepoFiles } from '../github/repoFetcher';
+import { scanFile } from '../scanner';
+import { aggregateSignals } from '../aggregator/signalAggregator';
 
 /**
  * POST /analyze-repo
@@ -41,11 +43,27 @@ export const analyzeController = async (req: Request, res: Response): Promise<vo
       fileCount: repoFiles.length
     });
     
-    // Phase 3 - Files are already filtered in Phase 2
-    logPhase('3', 'Files filtered', { owner, repo, branch, fileCount: repoFiles.length });
+    // Phase 3 - Scan files for signals (extraction)
+    logPhase('3', 'Scanning files for signals', { owner, repo, branch });
+    const allSignals = repoFiles.flatMap((file) => scanFile(file));
+    logger.info('Signals extracted from files', {
+      owner,
+      repo,
+      branch,
+      totalSignals: allSignals.length
+    });
     
-    // TODO: Phase 4 - Scan files for signals
-    logPhase('4', 'Scanning files for signals', { owner, repo, branch });
+    // Phase 4 - Aggregate signals
+    logPhase('4', 'Aggregating signals', { owner, repo, branch });
+    const aggregation = aggregateSignals(allSignals);
+    
+    logger.info('Signal aggregation complete', {
+      owner,
+      repo,
+      branch,
+      ...aggregation.counts,
+      statistics: aggregation.statistics
+    });
     
     // TODO: Phase 5 - Build IR
     logPhase('5', 'Building IR', { owner, repo, branch });
@@ -63,22 +81,25 @@ export const analyzeController = async (req: Request, res: Response): Promise<vo
     });
 
     res.json({
-      message: 'Phase 2 complete - Repository files fetched',
+      message: 'Phase 4 complete - Signals aggregated',
       input: { owner, repo, branch },
       stats: {
         filesFetched: repoFiles.length,
         totalSize: repoFiles.reduce((sum, f) => sum + f.content.length, 0),
+        signalsExtracted: aggregation.counts.total,
         duration: `${duration}ms`
       },
-      // For testing/debugging - showing first 10 file paths
-      // Note: ALL files are fetched with full content, stored in repoFiles array
-      // These will be used in Phase 4 for signal extraction
-      sampleFiles: repoFiles.slice(0, 10).map(f => ({
-        path: f.path,
-        size: f.content.length,
-        preview: f.content.substring(0, 100) + (f.content.length > 100 ? '...' : '')
-      })),
-      note: `All ${repoFiles.length} files have been fetched with full content and are ready for Phase 4 (signal extraction)`
+      signalCounts: aggregation.counts,
+      statistics: aggregation.statistics,
+      // Sample signals for testing (first 5 of each type)
+      sampleSignals: {
+        entry: aggregation.byType.entry.slice(0, 5),
+        call: aggregation.byType.call.slice(0, 5),
+        event: aggregation.byType.event.slice(0, 5),
+        external: aggregation.byType.external.slice(0, 5),
+        structure: aggregation.byType.structure.slice(0, 5)
+      },
+      note: `All ${aggregation.counts.total} signals aggregated from ${repoFiles.length} files. Ready for Phase 5 (IR construction).`
     });
   } catch (error) {
     const duration = Date.now() - startTime;
