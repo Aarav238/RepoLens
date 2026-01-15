@@ -77,15 +77,45 @@ export function scanExternals(file: RepoFile): Signal[] {
   }
 
   // 4. Detect queue operations: enqueue(), publish()
+  // Deny-list to filter out false positives (multer, file uploads, etc.)
+  const queueDenyList = ['multer', 'file', 'upload', 'limit', 'size', 'mb', 'kb', 'gb', 'storage', 'buffer', 'stream', 'body-parser', 'bodyparser'];
   const queueOperations = ['enqueue', 'dequeue', 'publish', 'subscribe', 'send', 'receive'];
   
+  // Helper function to check if context contains deny-listed keywords
+  const isQueueFalsePositive = (context: string): boolean => {
+    const contextLower = context.toLowerCase();
+    // Check deny-list keywords
+    if (queueDenyList.some(keyword => contextLower.includes(keyword))) {
+      return true;
+    }
+    // Check if queue name looks like a file size (e.g., "30mb", "10kb")
+    if (/\d+\s*(mb|kb|gb|bytes?)/i.test(context)) {
+      return true;
+    }
+    return false;
+  };
+
   for (const op of queueOperations) {
     const queuePattern = new RegExp(`\\.${op}\\s*\\(`, 'gi');
     while ((match = queuePattern.exec(content)) !== null) {
-      // Try to extract queue name
+      // Get context around the match to check for false positives
+      const contextBefore = content.substring(Math.max(0, match.index - 100), match.index);
       const contextAfter = content.substring(match.index, match.index + 100);
+      const fullContext = contextBefore + contextAfter;
+
+      // Skip if this looks like a false positive
+      if (isQueueFalsePositive(fullContext)) {
+        continue;
+      }
+
+      // Try to extract queue name
       const queueMatch = contextAfter.match(/['"`]([^'"`]+)['"`]/);
       const queueName = queueMatch ? queueMatch[1] : 'queue';
+
+      // Additional check: skip if extracted queue name looks like file size
+      if (/^\d+\s*(mb|kb|gb|bytes?)$/i.test(queueName)) {
+        continue;
+      }
 
       signals.push({
         type: 'external',

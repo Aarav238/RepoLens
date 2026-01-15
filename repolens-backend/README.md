@@ -22,9 +22,11 @@ npm install
 cp .env.example .env
 ```
 
-3. Add your GitHub token and configure logging in `.env`:
+3. Add your GitHub token, OpenAI API key, and configure logging in `.env`:
 ```
 GITHUB_TOKEN=ghp_your_token_here
+OPENAI_API_KEY=sk-your-openai-key-here
+OPENAI_MODEL=gpt-4o-mini
 PORT=3000
 LOG_LEVEL=debug
 NODE_ENV=development
@@ -32,6 +34,8 @@ NODE_ENV=development
 
 **Environment Variables:**
 - `GITHUB_TOKEN` - GitHub Personal Access Token (required)
+- `OPENAI_API_KEY` - OpenAI API key for LLM reasoning (required for Phase 7.3+)
+- `OPENAI_MODEL` - OpenAI model to use (default: gpt-4o-mini)
 - `PORT` - Server port (default: 3000)
 - `LOG_LEVEL` - Logging level: error, warn, info, debug (default: debug in dev, info in prod)
 - `NODE_ENV` - Environment: development or production (default: development)
@@ -75,7 +79,17 @@ src/
 │   └── types.ts              # Signal type definitions
 ├── ir/
 │   ├── ir.types.ts           # IR schema definitions
-│   └── ir.builder.ts         # IR construction logic
+│   ├── ir.builder.ts         # IR construction logic
+│   ├── flowContext.types.ts  # FlowContext type definitions
+│   ├── flowContextBuilder.ts # FlowContext builder (Phase 7.1)
+│   └── flowEnricher.ts       # Flow enrichment with LLM (Phase 7.5)
+├── llm/
+│   ├── prompts.ts            # LLM prompt definitions (Phase 7.2)
+│   ├── client.ts             # Raw LLM client (Phase 7.3)
+│   ├── flowReasoner.ts       # Flow reasoning adapter (Phase 7.3)
+│   ├── flowOutput.types.ts   # Output schema types (Phase 7.2/7.4)
+│   ├── flowOutputValidator.ts # Output validation (Phase 7.4)
+│   └── index.ts              # Module exports
 └── utils/
     ├── fileFilter.ts         # File filtering utility
     └── logger.ts             # Winston logger configuration
@@ -84,11 +98,19 @@ src/
 ## 🧱 Development Phases
 
 - ✅ **Phase 1**: Backend skeleton (COMPLETE)
-- ⏳ **Phase 2**: GitHub repo ingestion
-- ⏳ **Phase 3**: Signal extraction
-- ⏳ **Phase 4**: Signal aggregation
-- ⏳ **Phase 5**: IR construction
-- ⏳ **Phase 6**: API response
+- ✅ **Phase 2**: GitHub repo ingestion (COMPLETE)
+- ✅ **Phase 3**: Signal extraction (COMPLETE)
+- ✅ **Phase 4**: Signal aggregation (COMPLETE)
+- ✅ **Phase 5**: IR construction (COMPLETE)
+- ✅ **Phase 5.5**: Critical fixes (COMPLETE)
+- ✅ **Phase 5.6**: Flow linking (COMPLETE)
+- ✅ **Phase 5.7**: Handler indexing (COMPLETE)
+- ✅ **Phase 6**: API response (COMPLETE)
+- ✅ **Phase 7.1**: FlowContext builder (COMPLETE)
+- ✅ **Phase 7.2**: Prompt & output contract (COMPLETE)
+- ✅ **Phase 7.3**: LLM invocation layer (COMPLETE)
+- ✅ **Phase 7.4**: Output validation (COMPLETE)
+- ✅ **Phase 7.5**: IR enrichment (COMPLETE)
 
 ## 📡 API Endpoints
 

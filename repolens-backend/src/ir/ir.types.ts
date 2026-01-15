@@ -54,10 +54,17 @@ export interface External {
   operations: string[];
 }
 
+import { OrderedStep } from '../llm/flowOutput.types';
+
 export interface Flow {
   id: string;
   from: string; // Service ID or Entry Point ID
   to: string; // Service ID or External ID
   type: 'call' | 'event' | 'external';
   metadata?: Record<string, any>;
+  // Phase 7.5: LLM reasoning enrichment (optional)
+  orderedSteps?: OrderedStep[];
+  summary?: string;
+  reasoningStatus?: 'ok' | 'skipped' | 'failed';
+  reasoningError?: string;
 }

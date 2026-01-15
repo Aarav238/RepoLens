@@ -3,6 +3,9 @@ import { logger, logError, logPhase } from '../utils/logger';
 import { fetchRepoFiles } from '../github/repoFetcher';
 import { scanFile } from '../scanner';
 import { aggregateSignals } from '../aggregator/signalAggregator';
+import { buildIR } from '../ir/ir.builder';
+import { buildAllFlowContexts, logFlowContext } from '../ir/flowContextBuilder';
+import { enrichFlowsWithReasoning } from '../ir/flowEnricher';
 
 /**
  * POST /analyze-repo
@@ -65,10 +68,46 @@ export const analyzeController = async (req: Request, res: Response): Promise<vo
       statistics: aggregation.statistics
     });
     
-    // TODO: Phase 5 - Build IR
+    // Phase 5 - Build IR
     logPhase('5', 'Building IR', { owner, repo, branch });
+    const ir = buildIR(aggregation.allSignals, {
+      owner,
+      repo,
+      branch,
+      totalFiles: repoFiles.length
+    });
     
-    // TODO: Phase 6 - Return IR
+    logger.info('IR construction complete', {
+      owner,
+      repo,
+      branch,
+      services: ir.services.length,
+      entryPoints: ir.entryPoints.length,
+      events: ir.events.length,
+      externals: ir.externals.length,
+      flows: ir.flows.length
+    });
+
+    // Phase 7.1 - Build FlowContexts (for debugging)
+    logPhase('7.1', 'Building FlowContexts for LLM', { owner, repo, branch });
+    const flowContexts = buildAllFlowContexts(ir);
+    
+    // DEBUG: Log flow contexts to verify structure
+    if (flowContexts.length > 0) {
+      const flowWithSteps = flowContexts.find(ctx => ctx.rawSteps.length > 0) || flowContexts[0];
+      
+      console.log('\n========== PHASE 7.1 DEBUG: FlowContext Sample ==========');
+      logFlowContext(flowWithSteps);
+      console.log(`Total FlowContexts built: ${flowContexts.length}`);
+      console.log(`Flows with steps: ${flowContexts.filter(ctx => ctx.rawSteps.length > 0).length}`);
+      console.log(`Flows without steps: ${flowContexts.filter(ctx => ctx.rawSteps.length === 0).length}`);
+      console.log('==========================================================\n');
+    }
+
+    // Phase 7.5 - Enrich all flows with LLM reasoning
+    await enrichFlowsWithReasoning(ir);
+    
+    // Phase 6 - Return IR
     logPhase('6', 'Returning IR', { owner, repo, branch });
 
     const duration = Date.now() - startTime;
@@ -80,26 +119,43 @@ export const analyzeController = async (req: Request, res: Response): Promise<vo
       filesFetched: repoFiles.length
     });
 
+    // Calculate enrichment statistics
+    const enrichmentStats = {
+      total: ir.flows.length,
+      ok: ir.flows.filter(f => f.reasoningStatus === 'ok').length,
+      skipped: ir.flows.filter(f => f.reasoningStatus === 'skipped').length,
+      failed: ir.flows.filter(f => f.reasoningStatus === 'failed').length
+    };
+
     res.json({
-      message: 'Phase 4 complete - Signals aggregated',
+      message: 'Phase 7.5 complete - IR constructed and enriched with LLM reasoning',
       input: { owner, repo, branch },
       stats: {
         filesFetched: repoFiles.length,
         totalSize: repoFiles.reduce((sum, f) => sum + f.content.length, 0),
         signalsExtracted: aggregation.counts.total,
+        flowContextsBuilt: flowContexts.length,
+        enrichment: enrichmentStats,
         duration: `${duration}ms`
       },
-      signalCounts: aggregation.counts,
-      statistics: aggregation.statistics,
-      // Sample signals for testing (first 5 of each type)
-      sampleSignals: {
-        entry: aggregation.byType.entry.slice(0, 5),
-        call: aggregation.byType.call.slice(0, 5),
-        event: aggregation.byType.event.slice(0, 5),
-        external: aggregation.byType.external.slice(0, 5),
-        structure: aggregation.byType.structure.slice(0, 5)
+      ir: {
+        meta: ir.meta,
+        services: ir.services,
+        entryPoints: ir.entryPoints,
+        events: ir.events,
+        externals: ir.externals,
+        flows: ir.flows
       },
-      note: `All ${aggregation.counts.total} signals aggregated from ${repoFiles.length} files. Ready for Phase 5 (IR construction).`
+      // Phase 7.1: FlowContexts for LLM reasoning
+      flowContexts,
+      summary: {
+        services: ir.services.length,
+        entryPoints: ir.entryPoints.length,
+        events: ir.events.length,
+        externals: ir.externals.length,
+        flows: ir.flows.length,
+        flowContexts: flowContexts.length
+      }
     });
   } catch (error) {
     const duration = Date.now() - startTime;
